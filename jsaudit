@@ -1,0 +1,82 @@
+#!/usr/bin/python
+
+'''
+Searches the given dir for django template variables found within script tags within .html files
+and returns a list sorted by total number of times found
+
+flags: '-a' for alphabetic sorting, '-b' for counting by base object only 
+'''
+
+import sys
+import os
+import re
+from operator import itemgetter
+
+flags = []
+rel_path = sys.argv[1]
+
+if '-a' in sys.argv:
+	flags.append('a')
+	rel_path = sys.argv[2]
+if '-b' in sys.argv:
+	flags.append('b')
+	rel_path = sys.argv[2]
+
+rootdir = os.path.abspath('')
+startdir = os.sep.join([rootdir, rel_path])
+script_pattern = re.compile("<script.*</script>", re.DOTALL)
+scripts = []
+
+for path, dirs, files in os.walk(startdir):
+	for filename in files:
+		if re.search('.*\.html$', filename):
+	#		print path
+	#		print "    %s\n" % filename
+			filepath = os.sep.join([path,filename])
+			fhandle = open(filepath,"r")
+			html = fhandle.read()
+			#print html
+			scripts.extend(script_pattern.findall(html))
+#print scripts
+
+var_pattern = re.compile("{{.*?}}")
+template_vars = []
+for script in scripts:
+	template_vars.extend(var_pattern.findall(script))
+
+uniq_vars = []
+stripped_vars = []
+basevar_pattern = re.compile("(.*?)\.")
+filter_pattern = re.compile("(.*?)\|")
+for var in template_vars:
+	var = var.strip('{ }')
+	if re.search("\|", var):
+		match = filter_pattern.match(var)
+		var = match.group(1)
+	if 'b' in flags:
+		if re.search("\.", var):
+			match = basevar_pattern.match(var)
+			var = match.group(1)
+	stripped_vars.append(var)
+	if var not in uniq_vars:
+		uniq_vars.append(var)
+
+#print uniq_vars
+
+kv_list = []
+for var in uniq_vars:
+	kv_list.append((var, stripped_vars.count(var)))
+
+vars_dict = dict(kv_list)
+
+if 'a' in flags:
+	for key in sorted(vars_dict.iterkeys()):
+		print "%s : %s" % (vars_dict[key], key)
+else:
+#	for el in vars_dict:
+#		print el
+	vars_list = sorted(vars_dict.iteritems(), key=lambda (k,v):(v,k))
+ 	for var, count in vars_list: 
+ 		print "%s : %s" % (count, var)
+
+print "\nTotal Uniques: %s\n" % len(uniq_vars)

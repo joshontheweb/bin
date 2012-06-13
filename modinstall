@@ -1,0 +1,14 @@
+dir=$(pwd)
+if [ ${dir##*/} != 'module_intake' ]
+	then
+	echo "ERROR: This script is intended to be run from the sites/all/modules/module_intake folder of a drupal installation."
+
+else
+	url=$1
+	tarfile=${url##*/}
+	curl $url > $tarfile
+	folder=$(tar xfzv $tarfile)
+	folder=$(echo $folder | cut -d " " -f 1)
+	rm -rf ../$folder
+	mv $folder ../
+fi

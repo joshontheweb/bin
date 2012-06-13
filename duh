@@ -1,0 +1,13 @@
+
+if ! [ $1 -eq $1 ]
+	then
+		echo "Please specify a max-depth"
+	
+	else
+		if [ $(uname) != "Darwin" ]
+			then
+				du -h --max-depth $1
+			else
+				du -h -d $1
+		fi
+fi

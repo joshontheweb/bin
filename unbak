@@ -1,0 +1,15 @@
+#! /usr/bin/python
+
+import os
+import sys
+import re
+
+if re.search("^.*\.bak$", sys.argv[1]):
+	old = sys.argv[1]
+else:
+	print "ERROR: this is not a bak file"
+	sys.exit(1)
+
+new = old[:-4]
+
+os.renames(old, new)

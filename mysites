@@ -1,0 +1,292 @@
+#!/bin/bash
+
+file=~/.mysites # path to where you want your list of monitored sites
+okexp=' OK'		# The expression that identifies an OK status
+curlcmd='curl -Is --connect-timeout 5'	# The command and switches used to check the sites
+downfile='/tmp/mysitesdown'		# path to where you want your list of down sites
+smsnumber=8086369358	# cell phone number to where you sms updates sent to.
+smsdomain='messaging.sprintpcs.com'		# domain used by the mobile carrier for sms updates
+emailaddress='jbneslein@gmail.com'	# address to send email updates to
+cc="$smsnumber@$smsdomain,joshdotnielsen@gmail.com"		# Any email address you want carbon copied
+helptext="\nUsage:\n
+\tmysites [OPTION] [URL]\n
+\tmysites all\n
+\tmysites [add|del] [URL]\n
+\tmysites list\n\n
+
+Monitor a given list of urls and display thier return codes\n\n
+
+-a, --alert\n
+	\tnotify through e-mail and sms through given addresses\n\n
+
+-c, --chronological\n
+	\tnew sites are added to the list chronologically ( to the bottom )\n\tinstead of sorted in alphabetically\n\n
+
+-n, --no-style\n
+	\tremove style/color from output\n\n
+
+-o, --once\n
+	\tcheck the status of a site once without adding it to be monitored\n\n
+
+-h, --help\n
+	\tprint this help text\n\n"
+
+
+
+
+function send_fixed_email {
+# takes 2 arguemnts
+# $1 - site url
+# $2 - curl output
+
+	ssmtp -t <<EOF &
+To: $emailaddress
+Cc: $cc
+Subject: $1 back up
+
+$1 now up and returning $2
+EOF
+
+}
+
+function send_error_email {
+# takes 2 arguemnts
+# $1 - site url
+# $2 - curl output
+
+	ssmtp -t <<EOF &
+To: $emailaddress
+Cc: $cc
+Subject: $1 down
+
+$1 returned an error: $2
+EOF
+}
+
+function print_style {
+# expects two arguments
+# $1 - style
+# $2 - text
+	case "$1" in
+		uline)
+			styled="\e[4m$2\e[0m" # print out underlined
+		;;
+		red)
+			styled="\e[0;31m"$2"\e[0m" # print out in red
+		;;
+		green)
+			styled="\e[0;32m$2\e[0m"	# print out in green
+		;;
+	esac
+	echo -e $styled
+	return 0
+}
+
+
+function siteup {
+# takes 3 arguments
+# $1 - site url
+# $2 - curl output
+# $3 - path to list of down sites
+
+if [ $N ]
+	then
+		echo "$1|$2"
+	else
+		printf "%-35b %b\n" "$(print_style uline $1)" "$(print_style green "$2")" 	# print out return code in green
+fi
+if [ -e $3 ] && [ -s $3 ]	# if downfile exists and is not empty
+	then
+		if grep -x $1 $3 > /dev/null	# search downfile for site
+#		if  [ $? -eq 0 ]	# if site was found
+			then
+				sed -ie "\|^$1\$|d" $3 && echo "$1 was removed from downfile"  	# remove site from downfile
+				if [ $A ] # check for -a, --alert flag
+					then
+#					send_fixed_email $1 "$2"
+					echo "error mail would be sent for $1"
+				fi
+		fi
+fi
+}
+
+function sitedown {
+# takes 3 arguments
+# $1 - site url
+# $2 - curl output
+# $3 - path to list of down sites
+if [ $N ] # check for -n, --no-style flag
+	then
+		echo "$1|$2"
+	else
+		printf "%-35b %b\n" "$(print_style uline $1)" "$(print_style red "$2")" 	# print out return code in green
+fi
+if ! [ $O ] # check for NOT -o, --once flag
+	then
+	if [ -e $3 ]	# if list of downed sites already exists
+		then
+		if ! grep -x $1 $3 > /dev/null	# search for site in list of down sites
+			then
+			echo $1 >> $3 	# add site to list of downed sites
+			if [ $A ] # check for -a, --alert flag
+				then	
+			#	send_error_email $1 "$2"	# send out error notifications by email/sms
+				echo "error mail would be sent for $1"
+			fi
+		fi
+	else	# if no existing list of downed sites 
+		echo $1 > $3	# create file and start list of downed sites
+		if [ $A ] # check for -a, --alert flag
+			then
+		#	send_error_email $1 "$2"	# send out error notifications by email/sms
+			echo "error mail would be sent for $1"
+		fi
+	fi
+fi
+}
+
+function file_exists {    # at some point this should become generic and be used for the down file as well
+# takes one argument
+# $1 - path to file
+
+if ! [ -e $1 ] || ! [ -s $1 ]	# If no site list exists or it is empty
+	then
+	if [ -r $1 -a -w $1 ]
+		then
+			echo "No sites are being monitored"
+		else
+			echo "ERROR: $1 either does not exist or is not readable and writable"
+	fi
+	exit 1
+fi
+}
+
+function expected_args {
+# expects two arguments
+# $1 - $# of containing function
+# $2 - number of argument left including argument calling this function
+
+	if ! [ $1 -le $2 ]
+		then 
+		echo "ERROR: Unexpected argument."
+		echo -e $helptext
+		exit 2
+	fi
+}
+
+function curl_site {
+# takes one argument
+# $1 - site url
+
+curlout=$($curlcmd $1 | head -n 1)	# grab first line of header using curl
+if [[ $curlout == "" ]]
+	then
+		curlout="Could not connect to host"
+fi
+if [[ $curlout =~ $okexp ]] 	# if header returns ok status
+	then
+		siteup $1 "$curlout" $downfile || return 1	# run siteup function
+	else # if header returns error status
+		sitedown $1 "$curlout" $downfile || return 1	# run sitdown function
+fi
+return 0
+}
+
+while [ $# -ge 0 ]
+ do
+	case "$1" in
+		-a|--alert)		# alerts will be sent through email and sms using given addresses defined at top of file
+			A=1
+			shift 1
+		;;
+		-c|--chronological) # add new sites to the bottom of the list without sorting them in alphabetically
+			C=1
+			shift 1
+		;;
+		-h|--help|"")		# print out help text
+			echo -e $helptext
+			shift 1
+			exit 1
+		;;
+		-n|--no-style)		# no style will be applied to output
+			N=1
+			shift 1
+		;;
+		-o|--once)	# run a url through the program without adding it to the list of monitored sites
+			O=1
+			expected_args $# 2
+			curl_site $2 && exit 0
+		;;
+		*)
+#			echo "ERROR: unrecognized command switch" 
+#			exit 1
+			break	# if all of the options are parsed continue to the main case
+		;;
+	esac
+done
+
+
+case "$1" in
+	add)
+		expected_args $# 2
+#		file_exists $file
+		if ! grep -x $2 $file &> /dev/null	# search for site in sites list
+			then
+			echo $2 >> $file && echo "$2 is now being monitored." # append site to site list
+			if ! [ $C ] # check for NOT chronological flag ( -c )
+				then
+					sort $file -o $file	# sort alphabetically after new site is added.  ideally this should sort by domain name, but not sure how to do that yet. 
+			fi
+		else
+			echo "$2 is already being monitored."
+		fi
+	;;
+	
+	all)
+		expected_args $# 1
+		file_exists $file
+		sites=( $( < $file ) )	# fill $sites with array of sites list
+		for ((i=0; i<${#sites[@]}; i++)); do	# loop over $sites
+			curl_site ${sites[$i]}
+		done
+	
+#		cat $file | while read site; do
+#			echo "$site"
+#		done
+
+	;;
+
+	del)
+		expected_args $# 2
+		file_exists $file
+		if grep -x $2 $file > /dev/null	# search for site in sites list
+			then
+			sed -ie "\|^$2\$|d" $file	  	# remove site from site list
+			if [ $? -eq 0 ]		# if removal successful
+				then
+				echo "$2 is no longer being monitored"
+			fi
+		else
+			echo "ERROR: No site matching $2."
+		fi
+	;;
+	
+	list)
+		file_exists $file
+		cat $file
+	;;
+
+	*)
+		expected_args $# 1
+		file_exists $file
+		if grep -x $1 $file > /dev/null	# search for site in sites list
+			then
+				curl_site  $1
+		else
+			echo -e "\n$1 is not currently being monitored.\n\nYou can:\n"
+			printf "%15b:  %-30b\n" "add site" "'mysites add $1'"
+			printf "%15b:  %-30b\n" "check once" "'mysites -o $1'"
+			printf "%15b:  %-30b\n" "get help" "'mysites -h'"
+		fi
+	;;
+esac

@@ -1,0 +1,10 @@
+#! /bin/bash
+
+if [ -n "$1" ]
+then
+    POPPATH="$(pwd)/$1"
+    echo "\$POPPATH: $POPPATH"
+    echo $POPPATH >> /tmp/.push_history
+else
+    echo "ERROR: Push requires an argument."
+fi

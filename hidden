@@ -1,0 +1,26 @@
+#!/bin/bash
+# accepts boolean true or false arguments 
+
+if [ $# -lt 1 ];
+then
+	echo
+	echo 'a boolean true or false argument required'
+	echo
+	exit 1
+fi
+
+if $bool;
+then
+	echo $1
+	arg=TRUE
+	echo $arg
+else
+	echo $1
+	arg=FALSE
+	echo $arg
+fi
+
+eval 'defaults write com.apple.finder AppleShowAllFiles '$arg
+killall Finder
+
+exit 0

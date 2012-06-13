@@ -1,0 +1,16 @@
+#! /bin/bash
+if [ -f /tmp/.push_history ]
+    then
+    POPPATH=$(cat /tmp/.push_history | tail -1)
+    # POPPATH="/tmp/.push_history"
+        echo "copying \"$POPPATH\" to the current dir"
+        cp -r $POPPATH ./
+        if [ $? = 0 ]
+            then
+                echo "Copy successful."
+            else
+                echo "ERROR: Copy unsuccessful."
+        fi
+else
+    echo "ERROR: You have not pushed any files"
+fi

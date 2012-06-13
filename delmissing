@@ -1,0 +1,1 @@
+svn status | egrep "^\!" | awk { print } | xargs svn del
