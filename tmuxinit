@@ -1,0 +1,24 @@
+#!/usr/local/bin/node
+
+var fs = require('fs');
+var exec = require('child_process').exec;
+
+var initFilePath = process.argv[2];
+process.stdout.write('Starting Tmux session with ' + initFilePath + '\n');
+
+var initFile = fs.readFileSync(initFilePath);
+var windows = JSON.parse(initFile);
+
+// create Session
+exec('tmux -2 new-session -d -s $USER');
+
+Object.keys(windows).forEach(function(name, i) {
+	var command = windows[name];
+	windowIdx = i;
+	process.stdout.write(windowIdx + ' : ' + name + ' : ' + command + '\n');
+	exec('tmux new-window -t $USER:' + windowIdx);
+	exec('tmux rename-window -t $USER:' + windowIdx + ' ' + name);
+	exec('tmux send-keys "' + command + '" C-m');
+});
+
+
